@@ -195,7 +195,7 @@
     "typescript": "^5.4.0"
   },
   "dependencies": {
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "ignore": "^5.3.1"
   }
 }
