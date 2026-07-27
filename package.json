@@ -1,0 +1,210 @@
+{
+  "name": "snapzip",
+  "displayName": "SnapZip",
+"description": "Right-click any folder → zip. Smart, gitignore-aware, instant.",
+  "version": "1.0.1",
+  "icon": "media/SnapZip.png",
+  "publisher": "the-long-ride",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/the-long-ride/SnapZip"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "snapZip.compressFolder",
+        "title": "Compress as .zip",
+        "category": "SnapZip"
+      },
+      {
+        "command": "snapZip.compressWorkspace",
+        "title": "Compress Workspace as .zip",
+        "category": "SnapZip",
+        "icon": "$(file-zip)"
+      },
+      {
+        "command": "snapZip.addWorkspaceIgnorePattern",
+        "title": "Add Ignore Pattern (This Workspace)",
+        "category": "SnapZip"
+      },
+      {
+        "command": "snapZip.addGlobalIgnorePattern",
+        "title": "Add Ignore Pattern (Global, All Workspaces)",
+        "category": "SnapZip"
+      },
+      {
+        "command": "snapZip.manageIgnorePatterns",
+        "title": "Manage Ignore Patterns",
+        "category": "SnapZip"
+      },
+      {
+        "command": "snapZip.copyWorkspacePatterns",
+        "title": "Copy Workspace Ignore Patterns to Clipboard",
+        "category": "SnapZip"
+      },
+      {
+        "command": "snapZip.pasteWorkspacePatterns",
+        "title": "Paste/Apply Ignore Patterns From Clipboard to This Workspace",
+        "category": "SnapZip"
+      },
+      {
+        "command": "snapZip.openSettings",
+        "title": "Open Settings",
+        "category": "SnapZip"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "snapZip.compressFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "6_copypath"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "snapZip.compressWorkspace",
+          "when": "view == workbench.explorer.fileView",
+          "group": "navigation@100"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "snapZip.compressFolder",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SnapZip",
+      "properties": {
+        "snapZip.output.location": {
+          "type": "string",
+          "enum": [
+            "parentFolder",
+            "workspaceRoot"
+          ],
+          "enumDescriptions": [
+            "Save the .zip next to the folder being compressed (in its parent folder).",
+            "Always save the .zip in the workspace root folder."
+          ],
+          "default": "parentFolder",
+          "scope": "resource",
+          "description": "Where generated .zip files are saved."
+        },
+        "snapZip.output.compressionLevel": {
+          "type": "number",
+          "enum": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "enumDescriptions": [
+            "Fastest - least compression",
+            "Fast - light compression",
+            "Balanced - good compression (default)",
+            "Maximum - smallest file, slowest"
+          ],
+          "default": 3,
+          "scope": "resource",
+          "description": "Zip compression level, from 1 (fastest, least compressed) to 4 (slowest, most compressed)."
+        },
+        "snapZip.ignore.useGitignore": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Respect .gitignore rules (root .gitignore, .gitignore files in parent folders of the target, and any .gitignore files found inside the folder being zipped). Turn off to ignore nothing from Git rules."
+        },
+        "snapZip.ignore.workspacePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "description": "Extra gitignore-style patterns to exclude, specific to this workspace. Lines starting with # are treated as comments."
+        },
+        "snapZip.ignore.global": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".git/**",
+            ".env",
+            ".env.*",
+            "*.pem",
+            "*.key",
+            "*.pfx",
+            "*.p12",
+            "id_rsa",
+            "id_rsa.pub",
+            "id_ed25519",
+            "id_ed25519.pub",
+            "*.pgp",
+            "*.gpg",
+            ".aws/**",
+            ".ssh/**",
+            "*.crt",
+            "secrets.*",
+            "*-context-*.zip",
+            "*.snapzip.zip",
+            "node_modules/",
+            "dist/",
+            "build/",
+            "out/",
+            "target/",
+            "__pycache__/",
+            ".next/",
+            "coverage/",
+            ".nuxt/",
+            ".output/",
+            ".turbo/",
+            ".expo/",
+            ".svelte-kit/"
+          ],
+          "scope": "application",
+          "description": "Ignore patterns applied to every workspace, always on top of everything else. Lines starting with # are treated as comments. Meant for sensitive files (keys, credentials, env files) and build output."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "typecheck": "tsc --noEmit -p ./",
+    "test": "tsc -p tsconfig.test.json && mocha --require out-test/test/setup.js \"out-test/test/**/*.test.js\"",
+    "package": "vsce package",
+    "build:vsix": "vsce package"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.2",
+    "@types/mocha": "^10.0.0",
+    "@types/mock-require": "^2.0.0",
+    "@types/node": "^20.11.0",
+    "@types/sinon": "^17.0.0",
+    "@types/unzipper": "^0.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.0",
+    "mocha": "^10.0.0",
+    "mock-require": "^3.0.0",
+    "sinon": "^17.0.0",
+    "typescript": "^5.4.0",
+    "unzipper": "^0.12.0"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "ignore": "^5.3.1"
+  }
+}
