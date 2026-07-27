@@ -9,3 +9,8 @@ node_modules/**
 .gitignore
 out/*
 !out/extension.js
+out-test/**
+test/**
+tsconfig.test.json
+*.vsix
+

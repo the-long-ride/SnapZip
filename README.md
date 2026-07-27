@@ -46,8 +46,12 @@ Global patterns live in user settings (`settings.json`), so they apply everywher
 
 ## Links & License
 
-- Author: [the-long-ride](https://github.com/the-long-ride)
-- Repository: [https://github.com/the-long-ride/SnapZip](https://github.com/the-long-ride/SnapZip)
-- Issue Tracker: [https://github.com/the-long-ride/SnapZip/issues](https://github.com/the-long-ride/SnapZip/issues)
-- Changelog: [CHANGELOG.md](https://github.com/the-long-ride/SnapZip/blob/main/CHANGELOG.md)
-- License: [MIT License](https://github.com/the-long-ride/SnapZip/blob/main/LICENSE)
+| Resource | Link |
+|---|---|
+| **VS Code Marketplace** | [SnapZip on VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=the-long-ride.snapzip) |
+| **Open VSX Registry** | [SnapZip on Open VSX](https://open-vsx.org/extension/the-long-ride/snapzip) |
+| **Author** | [the-long-ride](https://github.com/the-long-ride) |
+| **Repository** | [github.com/the-long-ride/SnapZip](https://github.com/the-long-ride/SnapZip) |
+| **Issue Tracker** | [GitHub Issues](https://github.com/the-long-ride/SnapZip/issues) |
+| **Changelog** | [CHANGELOG.md](https://github.com/the-long-ride/SnapZip/blob/main/CHANGELOG.md) |
+| **License** | [MIT License](https://github.com/the-long-ride/SnapZip/blob/main/LICENSE) |
