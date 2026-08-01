@@ -14,11 +14,18 @@ export interface IgnoreOptions {
  * per-directory .gitignore precedence closely enough for export purposes.
  */
 function scopePattern(rawLine: string, dirRel: string): string | null {
-  const line = rawLine.trim();
-  if (!line || line.startsWith('#')) return null;
+  // Normalize Windows-style backslashes to POSIX forward slashes so patterns
+  // like `!electron\build\installer.nsh` work cross-platform.
+  const normed = rawLine.replace(/\\/g, '/').trim();
+  // Skip blank lines. KEEP `#` comment lines verbatim: the `ignore` library
+  // natively skips lines whose first character is `#` per the .gitignore
+  // spec, so we must NOT prefix them (e.g. `**/...`) -- doing so would turn
+  // them into literal patterns that match a file named `# group`.
+  if (!normed) return '';
+  if (normed.startsWith('#')) return normed;
 
   let negate = false;
-  let pattern = line;
+  let pattern = normed;
   if (pattern.startsWith('!')) {
     negate = true;
     pattern = pattern.slice(1);
@@ -30,6 +37,11 @@ function scopePattern(rawLine: string, dirRel: string): string | null {
   if (pattern.startsWith('/')) {
     // Anchored to the directory that owns this .gitignore.
     scoped = prefix ? `/${prefix}${pattern}` : pattern;
+  } else if (pattern.startsWith('**/')) {
+    // Already explicitly ANY-depth (e.g. `**/build/`). Scope to owner dir
+    // without prepending another `**/` -- that would require an intermediate
+    // directory and break root-of-owner matches.
+    scoped = prefix ? `/${prefix}/${pattern}` : pattern;
   } else if (pattern.includes('/') && !pattern.endsWith('/')) {
     // Contains a slash in the middle -> already anchored relative to owner dir.
     scoped = prefix ? `/${prefix}/${pattern}` : `/${pattern}`;
@@ -48,6 +60,7 @@ function readGitignore(dirAbs: string, dirRel: string): string[] {
   const out: string[] = [];
   for (const line of content.split(/\r?\n/)) {
     const scoped = scopePattern(line, dirRel);
+    // Skip blanks; keep `#` comment lines (ignore lib handles them natively).
     if (scoped) out.push(scoped);
   }
   return out;
@@ -114,17 +127,24 @@ export function buildIgnoreMatcher(
 ): Ignore {
   const ig = ignore();
 
+  // Helper: normalize Windows backslashes to POSIX and pass `#` comment
+  // lines through untouched -- the `ignore` library skips comment lines per
+  // the .gitignore spec (a leading `#` is treated as a comment), which lets
+  // users keep human-readable group headers in their pattern lists.
+  const addPatterns = (patterns: string[]): void => {
+    const cleaned: string[] = [];
+    for (const p of patterns) {
+      const trimmed = p ? p.replace(/\\/g, '/').trim() : '';
+      if (trimmed) cleaned.push(trimmed);
+    }
+    if (cleaned.length) ig.add(cleaned);
+  };
+
   // Global (all workspaces) patterns always apply, unscoped.
-  for (const p of options.globalPatterns) {
-    const trimmed = p ? p.trim() : '';
-    if (trimmed && !trimmed.startsWith('#')) ig.add(trimmed);
-  }
+  addPatterns(options.globalPatterns);
 
   // Workspace-specific custom patterns, unscoped (apply anywhere in workspace).
-  for (const p of options.workspacePatterns) {
-    const trimmed = p ? p.trim() : '';
-    if (trimmed && !trimmed.startsWith('#')) ig.add(trimmed);
-  }
+  addPatterns(options.workspacePatterns);
 
   if (options.useGitignore) {
     ig.add(collectAncestorGitignores(workspaceRootAbs, path.dirname(targetDirAbs) === targetDirAbs

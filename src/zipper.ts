@@ -38,7 +38,14 @@ function collectFiles(
 
   for (const entry of entries) {
     const abs = path.join(dirAbs, entry.name);
-    if (outputAbsToExclude && path.resolve(abs) === path.resolve(outputAbsToExclude)) continue;
+    if (outputAbsToExclude && path.resolve(abs) === path.resolve(outputAbsToExclude)) {
+      // The output zip itself is skipped by default to avoid self-recursion.
+      // However, if the user has explicitly re-included it via a `!` negation
+      // pattern (workspace/global/gitignore), honor that request and include it.
+      const relToRootOut = path.relative(workspaceRootAbs, abs).split(path.sep).join('/');
+      const testResult = ig.test(relToRootOut);
+      if (!testResult.unignored) continue;
+    }
 
     const relToRoot = path.relative(workspaceRootAbs, abs).split(path.sep).join('/');
     const checkPath = entry.isDirectory() ? `${relToRoot}/` : relToRoot;

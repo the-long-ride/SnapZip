@@ -100,6 +100,24 @@ describe('zipper', () => {
       assert.deepStrictEqual(names, ['markdown-explorer/file.txt']);
     });
 
+    it('includes the output zip when the user re-includes it via a `!` negation pattern', async () => {
+      // Simulate: a previous SnapZip run left a `.snapzip.zip` inside the
+      // target dir. Without a `!` rule, the global default `*.snapzip.zip`
+      // pattern (also the engine's own outputAbsToExclude guard for a file
+      // at the same path as the new output) would exclude it. With a `!` rule
+      // the user explicitly re-includes that prior zip into the new archive.
+      const existingZipName = 'markdown-explorer-2026-01-01-000000.snapzip.zip';
+      writeFile(path.join(targetDir, existingZipName), 'previous-zip-content');
+      writeFile(path.join(targetDir, 'file.txt'), 'file');
+
+      const ig = ignore().add([`!${existingZipName}`]);
+      const result = await zipFolder(workspaceRoot, targetDir, targetDir, ig, 1);
+
+      const names = (await collectEntries(result.outputPath)).map((e) => e.path).sort();
+      assert.ok(names.includes(`markdown-explorer/file.txt`));
+      assert.ok(names.includes(`markdown-explorer/${existingZipName}`));
+    });
+
     it('writes the zip to the specified output directory', async () => {
       const outputDir = path.join(tmpDir, 'output');
       writeFile(path.join(targetDir, 'x.txt'), 'x');

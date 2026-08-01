@@ -2,7 +2,7 @@
   "name": "snapzip",
   "displayName": "SnapZip",
 "description": "Right-click any folder → zip. Smart, gitignore-aware, instant.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "icon": "media/SnapZip.png",
   "publisher": "the-long-ride",
   "repository": {
@@ -139,7 +139,7 @@
             "type": "string"
           },
           "default": [
-            ".git/**",
+            "# --- Secrets & credentials ---",
             ".env",
             ".env.*",
             "*.pem",
@@ -152,28 +152,33 @@
             "id_ed25519.pub",
             "*.pgp",
             "*.gpg",
-            ".aws/**",
-            ".ssh/**",
             "*.crt",
             "secrets.*",
+            ".aws/**",
+            ".ssh/**",
+            "# --- SnapZip output ---",
             "*-context-*.zip",
             "*.snapzip.zip",
-            "node_modules/",
-            "dist/",
-            "build/",
-            "out/",
-            "target/",
-            "__pycache__/",
-            ".next/",
-            "coverage/",
-            ".nuxt/",
-            ".output/",
-            ".turbo/",
-            ".expo/",
-            ".svelte-kit/"
+            "# --- Dependency directories (any depth) ---",
+            "**/node_modules/",
+            "# --- Build / output directories (any depth, not only project root) ---",
+            "**/dist/",
+            "**/build/",
+            "**/out/",
+            "**/target/",
+            "**/__pycache__/",
+            "**/.next/",
+            "**/coverage/",
+            "**/.nuxt/",
+            "**/.output/",
+            "**/.turbo/",
+            "**/.expo/",
+            "**/.svelte-kit/",
+            "# --- Git metadata ---",
+            ".git/**"
           ],
           "scope": "application",
-          "description": "Ignore patterns applied to every workspace, always on top of everything else. Lines starting with # are treated as comments. Meant for sensitive files (keys, credentials, env files) and build output."
+          "description": "Ignore patterns applied to every workspace, always on top of everything else. Lines starting with # are treated as comments. Negation rules using leading `!` (e.g. `!electron/build/installer.nsh`) re-include files that would otherwise be ignored. Built directories such as `**/build/` match at any depth, not only the project root."
         }
       }
     }
