@@ -4,9 +4,15 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  release:
-    types: [published]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional explicit version (e.g. 1.0.3). Defaults to package.json version.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
   deploy:
@@ -14,6 +20,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -38,3 +46,86 @@ jobs:
         run: npx ovsx publish -p ${{ secrets.OVSX_PAT }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Extract version, publisher & changelog section
+        id: meta
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+          if (!pkg.version)  throw new Error('package.json: missing "version"');
+          if (!pkg.publisher) throw new Error('package.json: missing "publisher"');
+          if (!pkg.name)     throw new Error('package.json: missing "name"');
+
+          function emit(name, value) {
+            const d = `EOF_${name}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            process.stdout.write(`${name}<<${d}\n${value}\n${d}\n`);
+          }
+          emit('version',   pkg.version);
+          emit('publisher', pkg.publisher);
+          emit('name',      pkg.name);
+
+          // Extract the "## [x.y.z] ..." section from CHANGELOG.md.
+          let body = '';
+          if (fs.existsSync('./CHANGELOG.md')) {
+            const md = fs.readFileSync('./CHANGELOG.md', 'utf8');
+            const vEsc = pkg.version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const re = new RegExp(
+              '(?:^|\\n)##\\s*\\[' + vEsc + '\\][^\\n]*\\n(.*?)(?=\\n##\\s*\\[|$)',
+              's'
+            );
+            const m = md.match(re);
+            body = m ? m[1].trim() : '';
+          }
+          if (!body) {
+            body = `_No changelog entry found for v${pkg.version}._\n\n> Add a \`## [${pkg.version}] - <date>\` section to CHANGELOG.md to populate the release notes.`;
+          }
+          emit('changelog', body);
+          NODE
+
+      - name: Compose release body with marketplace links
+        env:
+          PUBLISHER: ${{ steps.meta.outputs.publisher }}
+          NAME: ${{ steps.meta.outputs.name }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          CHANGELOG: ${{ steps.meta.outputs.changelog }}
+        run: |
+          PUBLISHER_LOW="${PUBLISHER,,}"
+          NAME_LOW="${NAME,,}"
+          MARKETPLACE_URL="https://marketplace.visualstudio.com/items?itemName=${PUBLISHER}.${NAME}"
+          OPENVSX_URL="https://open-vsx.org/extension/${PUBLISHER_LOW}/${NAME_LOW}"
+
+          {
+            echo "## Download"
+            echo ""
+            echo "**Install from:**"
+            echo ""
+            echo "[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-${PUBLISHER}.${NAME}-0078d7?logo=visualstudiocode&logoColor=white)](${MARKETPLACE_URL})  "
+            echo "[![Open VSX](https://img.shields.io/badge/Open%20VSX-${PUBLISHER}/${NAME}-6cc644?logo=vscodium&logoColor=white)](${OPENVSX_URL})"
+            echo ""
+            echo "Or via the command line:"
+            echo ""
+            echo '```bash'
+            echo "# VS Code / Cursor / Windsurf"
+            echo "code --install-extension ${PUBLISHER}.${NAME}"
+            echo "# Open VSX (VSCodium / Eclipse Theia / Gitpod)"
+            echo "ovx get ${PUBLISHER}.${NAME}"
+            echo '```'
+            echo ""
+            echo "## What's new"
+            echo ""
+            printf '%s\n' "${CHANGELOG}"
+          } > release_body.md
+
+          echo "Wrote release_body.md ($(wc -l < release_body.md) lines)"
+
+      - name: Create or update GitHub release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: v${{ steps.meta.outputs.version }}
+          tag_name: v${{ steps.meta.outputs.version }}
+          body_path: release_body.md
+          prerelease: false
+          make_latest: true
