@@ -37,16 +37,6 @@ jobs:
           npm run typecheck
           npm run compile
 
-      - name: Publish to VS Code Marketplace
-        run: npx @vscode/vsce publish -p ${{ secrets.VSCE_PAT }}
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      - name: Publish to Open VSX Registry
-        run: npx ovsx publish -p ${{ secrets.OVSX_PAT }}
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
-
       - name: Extract version, publisher & changelog section
         id: meta
         run: |
@@ -83,8 +73,22 @@ jobs:
           emit('changelog', body);
           NODE
 
-      - name: Compose release body with marketplace links
+      - name: Package VSIX
+        run: npm run package
+
+      - name: Publish to VS Code Marketplace
+        run: npx @vscode/vsce publish -p ${{ secrets.VSCE_PAT }} --packagePath ./snapzip-${{ steps.meta.outputs.version }}.vsix
         env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX Registry
+        run: npx ovsx publish --packagePath ./snapzip-${{ steps.meta.outputs.version }}.vsix -p ${{ secrets.OVSX_PAT }}
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Compose release body with marketplace links & contributors
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLISHER: ${{ steps.meta.outputs.publisher }}
           NAME: ${{ steps.meta.outputs.name }}
           VERSION: ${{ steps.meta.outputs.version }}
@@ -95,31 +99,51 @@ jobs:
           MARKETPLACE_URL="https://marketplace.visualstudio.com/items?itemName=${PUBLISHER}.${NAME}"
           OPENVSX_URL="https://open-vsx.org/extension/${PUBLISHER_LOW}/${NAME_LOW}"
 
+          # --- Fetch contributors from the GitHub API (best effort) ---
+          CONTRIBUTORS=""
+          if [ -n "${GITHUB_REPOSITORY}" ] && [ -n "${GITHUB_TOKEN}" ]; then
+            CONTRIBUTORS="$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/contributors?per_page=100" 2>/dev/null \
+              | jq -r 'if type == "array" then .[] | " - [@\(.login)](\(.html_url))" else empty end' 2>/dev/null || true)"
+          fi
+
           {
-            echo "## Download"
+            echo "## 📦 Download"
             echo ""
             echo "**Install from:**"
             echo ""
             echo "[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-${PUBLISHER}.${NAME}-0078d7?logo=visualstudiocode&logoColor=white)](${MARKETPLACE_URL})  "
             echo "[![Open VSX](https://img.shields.io/badge/Open%20VSX-${PUBLISHER}/${NAME}-6cc644?logo=vscodium&logoColor=white)](${OPENVSX_URL})"
             echo ""
-            echo "Or via the command line:"
+            echo "**Or download the VSIX directly:**"
+            echo ""
+            echo "> \`snapzip-${VERSION}.vsix\` — attached in the **Assets** section below. Install with:"
             echo ""
             echo '```bash'
             echo "# VS Code / Cursor / Windsurf"
-            echo "code --install-extension ${PUBLISHER}.${NAME}"
+            echo "code --install-extension snapzip-${VERSION}.vsix"
             echo "# Open VSX (VSCodium / Eclipse Theia / Gitpod)"
             echo "ovx get ${PUBLISHER}.${NAME}"
             echo '```'
             echo ""
-            echo "## What's new"
+            echo "## ✨ What's new"
             echo ""
             printf '%s\n' "${CHANGELOG}"
+            echo ""
+            echo "## 🤝 Contributors"
+            echo ""
+            if [ -n "${CONTRIBUTORS}" ]; then
+              printf '%s\n' "${CONTRIBUTORS}"
+            else
+              echo "Thanks to everyone who contributed to SnapZip! 🙌"
+            fi
+            echo ""
+            echo "<sup>Contributor list generated from [GitHub contributor stats](https://github.com/${GITHUB_REPOSITORY}/graphs/contributors).</sup>"
           } > release_body.md
 
           echo "Wrote release_body.md ($(wc -l < release_body.md) lines)"
 
-      - name: Create or update GitHub release
+      - name: Create or update GitHub release with VSIX asset
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -127,5 +151,6 @@ jobs:
           name: v${{ steps.meta.outputs.version }}
           tag_name: v${{ steps.meta.outputs.version }}
           body_path: release_body.md
+          files: ./snapzip-${{ steps.meta.outputs.version }}.vsix
           prerelease: false
           make_latest: true

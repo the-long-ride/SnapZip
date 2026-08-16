@@ -2,6 +2,21 @@
 
 All notable changes to the SnapZip extension will be documented in this file.
 
+## [1.0.4] - 2026-08-17
+
+### Security
+- Updated transitive dependencies to patched releases, resolving three Dependabot advisories:
+  - `brace-expansion` `5.0.8` → `5.0.9` (CVE-2026-69152 — DoS via unbounded intermediate arrays, bypass of the CVE-2026-14257 mitigation).
+  - `fast-uri` `3.1.4` → `3.1.5` (GHSA-7p8r-x3mc-p8w7 — host confusion via backslash authority introducer).
+  - `js-yaml` `4.3.0` → `4.3.1` (GHSA-5p4m-2wfm-xmqj — quadratic CPU consumption in `!!omap` resolution).
+- `npm audit` now reports **0 vulnerabilities**.
+
+### Changed
+- Release pipeline (`release.yml`) now builds the `.vsix` once and:
+  - attaches it to the GitHub release page as a downloadable asset,
+  - publishes the exact same artifact to the VS Code Marketplace and Open VSX,
+  - renders the current-version changelog, VS Code Marketplace / Open VSX links, and an auto-generated contributors list in the release notes.
+
 ## [1.0.3] - 2026-08-17
 
 ### Fixed
