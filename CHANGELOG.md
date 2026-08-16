@@ -2,6 +2,25 @@
 
 All notable changes to the SnapZip extension will be documented in this file.
 
+## [1.0.3] - 2026-08-17
+
+### Fixed
+- `.gitignore` plain-name patterns (e.g. `*.log`) now correctly match **direct children** of the owning directory, not only deeper descendants. Previously a pattern in `packages/api/.gitignore` would miss `packages/api/foo.log`.
+- Root `.gitignore` patterns now apply when zipping a sub-folder whose parent chain includes the root (e.g. `error.log` at the workspace root is excluded even when zipping `src/`).
+- Deeper `.gitignore` files properly override shallower ones (git precedence). A `!keep.log` rule in a nested file now re-includes a file that a parent `*.log` rule would have excluded.
+- Patterns containing a middle slash (e.g. `secret/file.key`) are now anchored to the owning `.gitignore` directory and no longer match unrelated directories elsewhere in the tree.
+- Negation (`!`) re-include rules (e.g. `!electron/build/installer.nsh`) are no longer dropped when a parent directory matches an ignore glob (e.g. `**/build/`). The engine now checks for negation descendants before pruning directories and evaluates matching file targets explicitly.
+- Escaped-exclamation patterns (`\!important.txt`) are treated as a literal filename rather than being mis-parsed as a negation rule after backslash normalization.
+- The root `.gitignore` is no longer collected twice when the target directory equals the workspace root, which previously caused sequential `!` negation rules to flip incorrectly.
+
+### Changed
+- `buildIgnoreMatcher` now returns a `CombinedMatcher` (a new internal interface) instead of the raw `Ignore` object, encapsulating per-directory `.gitignore` evaluation with correct git-spec scoping.
+- `zipper.ts` updated to accept the new `Matcher` interface, decoupling it from the `ignore` library's internal types.
+- README updated to reflect that `.gitignore` handling now follows real git per-directory semantics rather than being described as an approximation.
+
+### Added
+- 6 new regression/correctness tests covering: direct-child matching, parent-`.gitignore` propagation, deeper-file override precedence, slash-anchored patterns, escaped `!` literals, and duplicate-collection avoidance.
+
 ## [1.0.2] - 2026-08-01
 
 ### Changed

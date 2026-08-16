@@ -247,5 +247,191 @@ describe('ignoreEngine', () => {
       assert.ok(matcher.ignores('apps/web/dist/index.html'));
       assert.ok(matcher.ignores('build/top.js'));
     });
+
+    it('matches direct children of a nested .gitignore directory with plain-name patterns', () => {
+      // Regression: scoping `*.log` from packages/api/.gitignore used to
+      // produce `/packages/api/**/*.log`, which missed direct children like
+      // packages/api/foo.log. Git matches at ANY depth, including depth 0.
+      const target = path.join(workspaceRoot, 'packages', 'api');
+      fs.mkdirSync(target, { recursive: true });
+      writeFile(path.join(target, '.gitignore'), '*.log');
+
+      const matcher = buildIgnoreMatcher(workspaceRoot, target, {
+        useGitignore: true,
+        workspacePatterns: [],
+        globalPatterns: []
+      });
+
+      assert.ok(matcher.ignores('packages/api/foo.log'), 'direct child must be ignored');
+      assert.ok(matcher.ignores('packages/api/sub/debug.log'), 'deeper files must be ignored');
+      assert.ok(!matcher.ignores('packages/api/src/main.ts'));
+    });
+
+    it('matches direct children of a parent .gitignore directory (not only the target subtree)', () => {
+      // Root .gitignore applies to sibling directories too when zipping a
+      // subfolder; its plain-name patterns must match direct children of root.
+      const target = path.join(workspaceRoot, 'src');
+      fs.mkdirSync(target, { recursive: true });
+      writeFile(path.join(workspaceRoot, '.gitignore'), '*.log');
+      writeFile(path.join(workspaceRoot, 'error.log'), 'x');
+
+      const matcher = buildIgnoreMatcher(workspaceRoot, target, {
+        useGitignore: true,
+        workspacePatterns: [],
+        globalPatterns: []
+      });
+
+      assert.ok(matcher.ignores('error.log'));
+      assert.ok(matcher.ignores('src/error.log'));
+    });
+
+    it('deeper .gitignore overrides shallower one (git precedence)', () => {
+      // Root ignores *.log; nested .gitignore re-includes keep.log.
+      const nested = path.join(workspaceRoot, 'src');
+      fs.mkdirSync(nested, { recursive: true });
+      writeFile(path.join(workspaceRoot, '.gitignore'), '*.log\n');
+      writeFile(path.join(nested, '.gitignore'), '!keep.log\n');
+
+      const matcher = buildIgnoreMatcher(workspaceRoot, nested, {
+        useGitignore: true,
+        workspacePatterns: [],
+        globalPatterns: []
+      });
+
+      assert.ok(matcher.ignores('src/debug.log'));
+      assert.ok(!matcher.ignores('src/keep.log'), 'deeper ! rule must re-include');
+    });
+
+    it('anchors patterns containing a middle slash to the owning directory', () => {
+      // `secret/file.key` in packages/api/.gitignore only matches
+      // packages/api/secret/file.key, not other secret/ dirs elsewhere.
+      const target = path.join(workspaceRoot, 'packages', 'api');
+      fs.mkdirSync(target, { recursive: true });
+      writeFile(path.join(target, '.gitignore'), 'secret/file.key');
+
+      const matcher = buildIgnoreMatcher(workspaceRoot, target, {
+        useGitignore: true,
+        workspacePatterns: [],
+        globalPatterns: []
+      });
+
+      assert.ok(matcher.ignores('packages/api/secret/file.key'));
+      assert.ok(!matcher.ignores('other/secret/file.key'));
+    });
+
+    it('treats \\! escaped exclamation as a literal pattern, not negation', () => {
+      // Regression: backslash normalization used to turn `\!important.txt`
+      // into `/!important.txt` — wrongly treated as a negation pattern.
+      writeFile(path.join(workspaceRoot, '.gitignore'), '\\!important.txt\n');
+
+      const matcher = buildIgnoreMatcher(workspaceRoot, workspaceRoot, {
+        useGitignore: true,
+        workspacePatterns: [],
+        globalPatterns: []
+      });
+
+      assert.ok(matcher.ignores('!important.txt'), 'literal ! filename must be ignored');
+      assert.ok(!matcher.ignores('other.txt'));
+    });
+
+    it('does not double-collect the target .gitignore (no duplicate evaluation side effects)', () => {
+      // Root .gitignore ignores *.tmp then re-includes special.tmp; correct
+      // sequential evaluation inside a single instance re-includes the file.
+      // (Previously the root file was added twice by ancestor + subtree scans,
+      // which could flip sequential negation results.)
+      writeFile(path.join(workspaceRoot, '.gitignore'), '*.tmp\n!special.tmp\n');
+
+      const matcher = buildIgnoreMatcher(workspaceRoot, workspaceRoot, {
+        useGitignore: true,
+        workspacePatterns: [],
+        globalPatterns: []
+      });
+
+      assert.ok(matcher.ignores('a.tmp'));
+      assert.ok(!matcher.ignores('special.tmp'), 'negation after ignore must re-include');
+    });
+  });
+
+  describe('hasNegationDescendant', () => {
+    it('returns true when a ! pattern targets a file inside the directory', () => {
+      const matcher = buildIgnoreMatcher(workspaceRoot, workspaceRoot, {
+        useGitignore: false,
+        workspacePatterns: [],
+        globalPatterns: ['**/build/', '!electron/build/installer.nsh']
+      });
+
+      // The directory is ignored by **/build/ ...
+      assert.ok(matcher.ignores('electron/build/'), 'electron/build/ should be ignored');
+      // ... but has a negation descendant, so the zipper should descend.
+      assert.ok(
+        matcher.hasNegationDescendant('electron/build'),
+        'should signal a negation descendant so zipper descends'
+      );
+      // The specific file itself must be re-included.
+      assert.ok(
+        !matcher.ignores('electron/build/installer.nsh'),
+        'installer.nsh must be re-included by the ! rule'
+      );
+      // Sibling files inside the dir must still be excluded.
+      assert.ok(
+        matcher.ignores('electron/build/main.js'),
+        'other files in build/ must remain ignored'
+      );
+    });
+
+    it('returns false for a directory with no negation descendants', () => {
+      const matcher = buildIgnoreMatcher(workspaceRoot, workspaceRoot, {
+        useGitignore: false,
+        workspacePatterns: [],
+        globalPatterns: ['**/build/']
+      });
+
+      assert.ok(!matcher.hasNegationDescendant('electron/build'));
+    });
+
+    it('handles workspace patterns as well as global patterns', () => {
+      const matcher = buildIgnoreMatcher(workspaceRoot, workspaceRoot, {
+        useGitignore: false,
+        workspacePatterns: ['!dist/keep-this.json'],
+        globalPatterns: ['**/dist/']
+      });
+
+      assert.ok(matcher.hasNegationDescendant('dist'));
+      assert.ok(!matcher.ignores('dist/keep-this.json'));
+      assert.ok(matcher.ignores('dist/bundle.js'));
+    });
+
+    it('handles negation patterns defined in root .gitignore when global pattern ignores **/build/', () => {
+      writeFile(path.join(workspaceRoot, '.gitignore'), '!electron/build/installer.nsh\n');
+
+      const matcher = buildIgnoreMatcher(workspaceRoot, workspaceRoot, {
+        useGitignore: true,
+        workspacePatterns: [],
+        globalPatterns: ['**/build/']
+      });
+
+      assert.ok(matcher.ignores('electron/build/'));
+      assert.ok(matcher.hasNegationDescendant('electron'));
+      assert.ok(matcher.hasNegationDescendant('electron/build'));
+      assert.ok(!matcher.ignores('electron/build/installer.nsh'));
+      assert.ok(matcher.ignores('electron/build/bundle.js'));
+    });
+
+    it('handles negation patterns defined in nested .gitignore when global pattern ignores **/build/', () => {
+      const electronDir = path.join(workspaceRoot, 'electron');
+      writeFile(path.join(electronDir, '.gitignore'), 'build/\n!build/installer.nsh\n');
+
+      const matcher = buildIgnoreMatcher(workspaceRoot, workspaceRoot, {
+        useGitignore: true,
+        workspacePatterns: [],
+        globalPatterns: ['**/build/']
+      });
+
+      assert.ok(matcher.ignores('electron/build/'));
+      assert.ok(matcher.hasNegationDescendant('electron'));
+      assert.ok(matcher.hasNegationDescendant('electron/build'));
+      assert.ok(!matcher.ignores('electron/build/installer.nsh'));
+      assert.ok(matcher.ignores('electron/build/other.js'));
+    });
   });
 });

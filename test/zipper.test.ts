@@ -5,6 +5,7 @@ import * as path from 'path';
 import ignore from 'ignore';
 import * as unzipper from 'unzipper';
 import { zipFolder, toZlibLevel, ZipResult } from '../src/zipper';
+import { wrapIgnore, buildIgnoreMatcher } from '../src/ignoreEngine';
 
 describe('zipper', () => {
   describe('toZlibLevel', () => {
@@ -63,7 +64,7 @@ describe('zipper', () => {
       writeFile(path.join(targetDir, 'b.txt'), 'bb');
       writeFile(path.join(targetDir, 'nested', 'c.txt'), 'ccc');
 
-      const result: ZipResult = await zipFolder(workspaceRoot, targetDir, targetDir, ignore(), 3);
+      const result: ZipResult = await zipFolder(workspaceRoot, targetDir, targetDir, wrapIgnore(ignore()), 3);
 
       assert.ok(fs.existsSync(result.outputPath));
       assert.equal(result.fileCount, 3);
@@ -81,7 +82,7 @@ describe('zipper', () => {
       writeFile(path.join(targetDir, 'secrets.env'), 'secret');
       writeFile(path.join(targetDir, 'dist', 'bundle.js'), 'bundle');
 
-      const ig = ignore().add(['*.log', '*.env', 'dist/']);
+      const ig = wrapIgnore(ignore().add(['*.log', '*.env', 'dist/']));
       const result = await zipFolder(workspaceRoot, targetDir, targetDir, ig, 1);
 
       const names = (await collectEntries(result.outputPath)).map((e) => e.path).sort();
@@ -93,7 +94,7 @@ describe('zipper', () => {
       writeFile(path.join(targetDir, 'file.txt'), 'file');
 
       const outputDir = targetDir;
-      const result = await zipFolder(workspaceRoot, targetDir, outputDir, ignore(), 1);
+      const result = await zipFolder(workspaceRoot, targetDir, outputDir, wrapIgnore(ignore()), 1);
 
       assert.ok(result.outputPath.startsWith(outputDir));
       const names = (await collectEntries(result.outputPath)).map((e) => e.path).sort();
@@ -110,7 +111,7 @@ describe('zipper', () => {
       writeFile(path.join(targetDir, existingZipName), 'previous-zip-content');
       writeFile(path.join(targetDir, 'file.txt'), 'file');
 
-      const ig = ignore().add([`!${existingZipName}`]);
+      const ig = wrapIgnore(ignore().add([`!${existingZipName}`]));
       const result = await zipFolder(workspaceRoot, targetDir, targetDir, ig, 1);
 
       const names = (await collectEntries(result.outputPath)).map((e) => e.path).sort();
@@ -122,7 +123,7 @@ describe('zipper', () => {
       const outputDir = path.join(tmpDir, 'output');
       writeFile(path.join(targetDir, 'x.txt'), 'x');
 
-      const result = await zipFolder(workspaceRoot, targetDir, outputDir, ignore(), 2);
+      const result = await zipFolder(workspaceRoot, targetDir, outputDir, wrapIgnore(ignore()), 2);
 
       assert.ok(result.outputPath.startsWith(outputDir));
       assert.ok(path.basename(result.outputPath).startsWith('markdown-explorer-'));
@@ -132,7 +133,7 @@ describe('zipper', () => {
     it('adds files with the folder-name prefix', async () => {
       writeFile(path.join(targetDir, 'root.txt'), 'root');
 
-      const result = await zipFolder(workspaceRoot, targetDir, targetDir, ignore(), 3);
+      const result = await zipFolder(workspaceRoot, targetDir, targetDir, wrapIgnore(ignore()), 3);
 
       const names = (await collectEntries(result.outputPath)).map((e) => e.path);
       assert.ok(names.every((n) => n.startsWith('markdown-explorer/')));
@@ -143,11 +144,31 @@ describe('zipper', () => {
       writeFile(path.join(targetDir, '2.txt'), '2');
       writeFile(path.join(targetDir, '3.txt'), '3');
 
-      const result = await zipFolder(workspaceRoot, targetDir, targetDir, ignore(), 4);
+      const result = await zipFolder(workspaceRoot, targetDir, targetDir, wrapIgnore(ignore()), 4);
 
       assert.equal(result.fileCount, 3);
       const entries = await collectEntries(result.outputPath);
       assert.equal(entries.length, 3);
+    });
+
+    it('includes installer.nsh when global pattern ignores **/build/ but .gitignore re-includes !electron/build/installer.nsh', async () => {
+      writeFile(path.join(targetDir, '.gitignore'), '!electron/build/installer.nsh\n');
+      writeFile(path.join(targetDir, 'src', 'main.ts'), 'console.log("hi");');
+      writeFile(path.join(targetDir, 'electron', 'build', 'installer.nsh'), '!macro customInstall');
+      writeFile(path.join(targetDir, 'electron', 'build', 'bundle.js'), 'ignored code');
+
+      const ig = buildIgnoreMatcher(workspaceRoot, targetDir, {
+        useGitignore: true,
+        workspacePatterns: [],
+        globalPatterns: ['**/build/']
+      });
+
+      const result = await zipFolder(workspaceRoot, targetDir, targetDir, ig, 1);
+      const names = (await collectEntries(result.outputPath)).map((e) => e.path).sort();
+
+      assert.ok(names.includes('markdown-explorer/src/main.ts'));
+      assert.ok(names.includes('markdown-explorer/electron/build/installer.nsh'));
+      assert.ok(!names.includes('markdown-explorer/electron/build/bundle.js'));
     });
   });
 });

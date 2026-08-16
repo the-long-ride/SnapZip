@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import archiver from 'archiver';
-import { Ignore } from 'ignore';
+import { Matcher } from './ignoreEngine';
 
 export interface ZipResult {
   outputPath: string;
@@ -25,7 +25,7 @@ function collectFiles(
   workspaceRootAbs: string,
   dirAbs: string,
   originalTargetDirAbs: string,
-  ig: Ignore,
+  ig: Matcher,
   outputAbsToExclude: string | null,
   acc: { entryRel: string; abs: string }[] = []
 ): { entryRel: string; abs: string }[] {
@@ -50,7 +50,15 @@ function collectFiles(
     const relToRoot = path.relative(workspaceRootAbs, abs).split(path.sep).join('/');
     const checkPath = entry.isDirectory() ? `${relToRoot}/` : relToRoot;
 
-    if (ig.ignores(checkPath)) continue;
+    if (ig.ignores(checkPath)) {
+      // Even if this directory is ignored, a user `!` negation pattern may
+      // re-include a specific file inside it (e.g. `!electron/build/installer.nsh`
+      // with global `**/build/`).  Check before pruning the whole subtree.
+      if (entry.isDirectory() && ig.hasNegationDescendant(relToRoot)) {
+        collectFiles(workspaceRootAbs, abs, originalTargetDirAbs, ig, outputAbsToExclude, acc);
+      }
+      continue;
+    }
 
     if (entry.isDirectory()) {
       collectFiles(workspaceRootAbs, abs, originalTargetDirAbs, ig, outputAbsToExclude, acc);
@@ -88,7 +96,7 @@ export function zipFolder(
   workspaceRootAbs: string,
   targetDirAbs: string,
   outputDirAbs: string,
-  ig: Ignore,
+  ig: Matcher,
   compressionLevel = 3
 ): Promise<ZipResult> {
   const folderName = path.basename(targetDirAbs);

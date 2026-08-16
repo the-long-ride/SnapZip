@@ -2,7 +2,7 @@
   "name": "snapzip",
   "displayName": "SnapZip",
 "description": "Right-click any folder → zip. Smart, gitignore-aware, instant.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "icon": "media/SnapZip.png",
   "publisher": "the-long-ride",
   "repository": {

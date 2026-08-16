@@ -8,150 +8,316 @@ export interface IgnoreOptions {
   globalPatterns: string[];
 }
 
-/**
- * Rewrites a single gitignore line so it is scoped to `dir` (relative to the
- * zip root) instead of being applied globally. This approximates git's real
- * per-directory .gitignore precedence closely enough for export purposes.
- */
-function scopePattern(rawLine: string, dirRel: string): string | null {
-  // Normalize Windows-style backslashes to POSIX forward slashes so patterns
-  // like `!electron\build\installer.nsh` work cross-platform.
-  const normed = rawLine.replace(/\\/g, '/').trim();
-  // Skip blank lines. KEEP `#` comment lines verbatim: the `ignore` library
-  // natively skips lines whose first character is `#` per the .gitignore
-  // spec, so we must NOT prefix them (e.g. `**/...`) -- doing so would turn
-  // them into literal patterns that match a file named `# group`.
-  if (!normed) return '';
-  if (normed.startsWith('#')) return normed;
-
-  let negate = false;
-  let pattern = normed;
-  if (pattern.startsWith('!')) {
-    negate = true;
-    pattern = pattern.slice(1);
-  }
-
-  const prefix = dirRel ? dirRel.replace(/\\/g, '/') : '';
-
-  let scoped: string;
-  if (pattern.startsWith('/')) {
-    // Anchored to the directory that owns this .gitignore.
-    scoped = prefix ? `/${prefix}${pattern}` : pattern;
-  } else if (pattern.startsWith('**/')) {
-    // Already explicitly ANY-depth (e.g. `**/build/`). Scope to owner dir
-    // without prepending another `**/` -- that would require an intermediate
-    // directory and break root-of-owner matches.
-    scoped = prefix ? `/${prefix}/${pattern}` : pattern;
-  } else if (pattern.includes('/') && !pattern.endsWith('/')) {
-    // Contains a slash in the middle -> already anchored relative to owner dir.
-    scoped = prefix ? `/${prefix}/${pattern}` : `/${pattern}`;
-  } else {
-    // Plain name (optionally trailing slash) -> matches at any depth under owner dir.
-    scoped = prefix ? `/${prefix}/**/${pattern}` : `**/${pattern}`;
-  }
-
-  return negate ? `!${scoped}` : scoped;
+/** Compatible with the `ignore` library's (unexported) TestResult. */
+export interface MatcherTestResult {
+  ignored: boolean;
+  unignored: boolean;
 }
 
-function readGitignore(dirAbs: string, dirRel: string): string[] {
+/**
+ * Minimal matcher interface consumed by zipper.ts.
+ * Mirrors the two `ignore` library methods actually used (ignores / test).
+ */
+export interface Matcher {
+  ignores(pathname: string): boolean;
+  test(pathname: string): MatcherTestResult;
+  /**
+   * Returns true if any negation (`!`) pattern in global, workspace, or
+   * .gitignore rules could target a file inside `dirPath` (POSIX,
+   * workspace-root-relative, no trailing slash).
+   *
+   * Used by the zipper to decide whether to descend into an otherwise-ignored
+   * directory: if a user wrote `!electron/build/installer.nsh` or `!*.nsh` but
+   * the global patterns include `**\/build\/`, the directory would be pruned
+   * before the file check ever runs. This flag tells the zipper to descend.
+   */
+  hasNegationDescendant(dirPath: string): boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Rule compilation & representation
+// ---------------------------------------------------------------------------
+
+interface CompiledRule {
+  isNegation: boolean;
+  raw: string;
+  ig: Ignore;
+}
+
+interface RuleSet {
+  /**
+   * Directory relative to workspace root (POSIX separators, empty string for root).
+   */
+  dirRel: string;
+  rules: CompiledRule[];
+}
+
+function compileRuleSet(dirRel: string, patterns: string[]): RuleSet {
+  const rules: CompiledRule[] = [];
+  for (const p of patterns) {
+    if (!p) continue;
+    let s = p.trim();
+    if (!s || s.startsWith('#')) continue;
+
+    const isEscapedExclamation = s.startsWith('\\!');
+    // Normalize backslashes to forward slashes and collapse duplicate slashes
+    s = s.replace(/\\+/g, '/').replace(/\/+/g, '/');
+    if (isEscapedExclamation) {
+      s = '\\!' + s.slice(2);
+    }
+    s = s.trim();
+
+    // Check if it's an unescaped negation rule
+    if (s.startsWith('!') && !isEscapedExclamation) {
+      const cleanPat = s.slice(1).trim();
+      if (cleanPat) {
+        rules.push({
+          isNegation: true,
+          raw: cleanPat,
+          ig: ignore().add(cleanPat)
+        });
+      }
+    } else {
+      // Normal ignore pattern (or escaped \! pattern)
+      const cleanPat = isEscapedExclamation ? s.slice(2) : s;
+      rules.push({
+        isNegation: false,
+        raw: cleanPat,
+        ig: ignore().add(s)
+      });
+    }
+  }
+  return { dirRel, rules };
+}
+
+// ---------------------------------------------------------------------------
+// CombinedMatcher — git-accurate per-directory & negation evaluation
+// ---------------------------------------------------------------------------
+
+/**
+ * Evaluates paths sequentially across global settings, workspace settings,
+ * and per-directory .gitignore files.
+ *
+ * Handles negation patterns (`!`) correctly even when a parent directory
+ * matches a broader ignore pattern (e.g. `**\/build\/` + `!electron/build/installer.nsh`).
+ */
+class CombinedMatcher implements Matcher {
+  private ruleSets: RuleSet[];
+  private allNegations: { dirRel: string; raw: string }[];
+
+  constructor(ruleSets: RuleSet[]) {
+    this.ruleSets = ruleSets;
+    this.allNegations = [];
+    for (const rs of ruleSets) {
+      for (const r of rs.rules) {
+        if (r.isNegation) {
+          this.allNegations.push({ dirRel: rs.dirRel, raw: r.raw });
+        }
+      }
+    }
+  }
+
+  ignores(pathname: string): boolean {
+    return this.test(pathname).ignored;
+  }
+
+  hasNegationDescendant(dirPath: string): boolean {
+    if (this.allNegations.length === 0) return false;
+    const normalizedDir = dirPath.replace(/\\/g, '/').replace(/^\//, '').replace(/\/$/, '');
+    const dirPrefix = normalizedDir ? normalizedDir + '/' : '';
+
+    for (const neg of this.allNegations) {
+      const pat = neg.raw.replace(/^\//, '');
+      const fullPat = neg.dirRel ? `${neg.dirRel}/${pat}` : pat;
+
+      // 1. Direct prefix match: pattern is inside the directory (e.g. 'electron/build/installer.nsh' vs 'electron/build' or 'electron')
+      if (fullPat.startsWith(dirPrefix)) return true;
+
+      // 2. Directory is inside pattern directory (e.g. pattern was a folder)
+      if (dirPrefix.startsWith(fullPat.replace(/\/$/, '') + '/')) return true;
+
+      // 3. Basename / any-depth pattern (e.g. '*.nsh', 'installer.nsh', '**/installer.nsh')
+      if (!pat.includes('/') || pat.startsWith('**/') || fullPat.startsWith('**/')) {
+        // If scoped to a directory, check if dirPath is within that scope
+        if (!neg.dirRel || dirPrefix.startsWith(neg.dirRel + '/') || normalizedDir === neg.dirRel || neg.dirRel.startsWith(dirPrefix)) {
+          return true;
+        }
+      }
+
+      // 4. Wildcard pattern (e.g. 'electron/**/installer.nsh' or 'electron/*/installer.nsh')
+      if (fullPat.includes('*') || fullPat.includes('?')) {
+        const baseDirOfPat = fullPat.split(/[*?]/)[0];
+        if (dirPrefix.startsWith(baseDirOfPat) || baseDirOfPat.startsWith(dirPrefix)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  test(pathname: string): MatcherTestResult {
+    let isIgnored = false;
+    let isUnignored = false;
+
+    for (const rs of this.ruleSets) {
+      if (rs.dirRel) {
+        if (pathname !== rs.dirRel && !pathname.startsWith(rs.dirRel + '/')) {
+          continue;
+        }
+      }
+
+      const localPath = !rs.dirRel ? pathname : pathname.slice(rs.dirRel.length + 1);
+      if (!localPath) continue;
+
+      for (const rule of rs.rules) {
+        if (rule.ig.ignores(localPath)) {
+          if (rule.isNegation) {
+            isIgnored = false;
+            isUnignored = true;
+          } else {
+            isIgnored = true;
+            isUnignored = false;
+          }
+        }
+      }
+    }
+
+    return { ignored: isIgnored, unignored: isUnignored };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// .gitignore file reading & collection
+// ---------------------------------------------------------------------------
+
+/** Read raw lines from a .gitignore file, or return [] if absent. */
+function readGitignore(dirAbs: string): string[] {
   const gi = path.join(dirAbs, '.gitignore');
   if (!fs.existsSync(gi)) return [];
-  const content = fs.readFileSync(gi, 'utf8');
-  const out: string[] = [];
-  for (const line of content.split(/\r?\n/)) {
-    const scoped = scopePattern(line, dirRel);
-    // Skip blanks; keep `#` comment lines (ignore lib handles them natively).
-    if (scoped) out.push(scoped);
-  }
-  return out;
+  return fs.readFileSync(gi, 'utf8').split(/\r?\n/);
 }
 
 /**
  * Walks up from `targetDirAbs` to `workspaceRootAbs`, collecting .gitignore
- * files along the ancestor chain (root .gitignore + each parent folder's
- * .gitignore), each scoped to its own directory.
+ * files along the ancestor chain (root through parent of target).
+ * Returns root-first so deeper entries override shallower ones.
  */
-function collectAncestorGitignores(workspaceRootAbs: string, targetDirAbs: string): string[] {
-  const chain: string[] = [];
-  let dir = targetDirAbs;
+function collectAncestorGitignores(
+  workspaceRootAbs: string,
+  targetDirAbs: string
+): RuleSet[] {
   const dirs: string[] = [];
+  let dir = targetDirAbs;
   while (true) {
     dirs.push(dir);
     if (path.resolve(dir) === path.resolve(workspaceRootAbs)) break;
     const parent = path.dirname(dir);
-    if (parent === dir) break; // reached filesystem root safeguard
+    if (parent === dir) break;
     dir = parent;
   }
-  // Walk from root down to target so more specific rules are added last.
+
+  const ruleSets: RuleSet[] = [];
   for (const d of dirs.reverse()) {
-    const rel = path.relative(workspaceRootAbs, d);
-    chain.push(...readGitignore(d, rel === '' ? '' : rel));
+    const rel = path.relative(workspaceRootAbs, d).split(path.sep).join('/');
+    const patterns = readGitignore(d);
+    if (patterns.length > 0) {
+      ruleSets.push(compileRuleSet(rel, patterns));
+    }
   }
-  return chain;
+  return ruleSets;
 }
 
 /**
- * Recursively collects .gitignore files found *inside* the subtree being
- * zipped (nested .gitignore support), each scoped to its own directory.
+ * Recursively collects .gitignore files inside `dirAbs` (inclusive) and its
+ * subdirectories.
  */
-function collectSubtreeGitignores(workspaceRootAbs: string, dirAbs: string): string[] {
-  const rel = path.relative(workspaceRootAbs, dirAbs);
-  let patterns = readGitignore(dirAbs, rel === '' ? '' : rel);
-
-  let entries: fs.Dirent[] = [];
-  try {
-    entries = fs.readdirSync(dirAbs, { withFileTypes: true });
-  } catch {
-    return patterns;
+function collectSubtreeGitignores(
+  workspaceRootAbs: string,
+  dirAbs: string
+): RuleSet[] {
+  const rel = path.relative(workspaceRootAbs, dirAbs).split(path.sep).join('/');
+  const patterns = readGitignore(dirAbs);
+  const ruleSets: RuleSet[] = [];
+  if (patterns.length > 0) {
+    ruleSets.push(compileRuleSet(rel, patterns));
   }
-  for (const entry of entries) {
+
+  let dirents: fs.Dirent[] = [];
+  try {
+    dirents = fs.readdirSync(dirAbs, { withFileTypes: true });
+  } catch {
+    return ruleSets;
+  }
+  for (const entry of dirents) {
     if (entry.isDirectory()) {
-      if (entry.name === '.git') continue; // never descend into .git for gitignore scanning
-      patterns = patterns.concat(
-        collectSubtreeGitignores(workspaceRootAbs, path.join(dirAbs, entry.name))
+      if (entry.name === '.git') continue;
+      ruleSets.push(
+        ...collectSubtreeGitignores(workspaceRootAbs, path.join(dirAbs, entry.name))
       );
     }
   }
-  return patterns;
+  return ruleSets;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps a plain `Ignore` instance into a `Matcher`.
+ * `hasNegationDescendant` returns false.
+ */
+export function wrapIgnore(ig: Ignore): Matcher {
+  return {
+    ignores: (p) => ig.ignores(p),
+    test: (p) => ig.test(p),
+    hasNegationDescendant: () => false,
+  };
 }
 
 /**
- * Builds a single `ignore` matcher for exporting `targetDirAbs`, given the
- * workspace root. Returns a predicate that takes a path relative to
- * `workspaceRootAbs` (POSIX separators) and says whether it should be skipped.
+ * Builds a matcher for zipping `targetDirAbs` inside `workspaceRootAbs`.
+ *
+ * Global settings, workspace settings, and per-directory `.gitignore` files
+ * are compiled into rule sets with accurate git-precedence order and full
+ * negation re-inclusion support.
  */
 export function buildIgnoreMatcher(
   workspaceRootAbs: string,
   targetDirAbs: string,
   options: IgnoreOptions
-): Ignore {
-  const ig = ignore();
+): Matcher {
+  const ruleSets: RuleSet[] = [];
 
-  // Helper: normalize Windows backslashes to POSIX and pass `#` comment
-  // lines through untouched -- the `ignore` library skips comment lines per
-  // the .gitignore spec (a leading `#` is treated as a comment), which lets
-  // users keep human-readable group headers in their pattern lists.
-  const addPatterns = (patterns: string[]): void => {
-    const cleaned: string[] = [];
-    for (const p of patterns) {
-      const trimmed = p ? p.replace(/\\/g, '/').trim() : '';
-      if (trimmed) cleaned.push(trimmed);
-    }
-    if (cleaned.length) ig.add(cleaned);
-  };
-
-  // Global (all workspaces) patterns always apply, unscoped.
-  addPatterns(options.globalPatterns);
-
-  // Workspace-specific custom patterns, unscoped (apply anywhere in workspace).
-  addPatterns(options.workspacePatterns);
-
-  if (options.useGitignore) {
-    ig.add(collectAncestorGitignores(workspaceRootAbs, path.dirname(targetDirAbs) === targetDirAbs
-      ? targetDirAbs
-      : targetDirAbs));
-    ig.add(collectSubtreeGitignores(workspaceRootAbs, targetDirAbs));
+  // 1. Global patterns
+  if (options.globalPatterns.length > 0) {
+    ruleSets.push(compileRuleSet('', options.globalPatterns));
   }
 
-  return ig;
+  // 2. Workspace patterns
+  if (options.workspacePatterns.length > 0) {
+    ruleSets.push(compileRuleSet('', options.workspacePatterns));
+  }
+
+  // 3. Per-directory .gitignore files
+  if (options.useGitignore) {
+    const targetIsRoot =
+      path.resolve(targetDirAbs) === path.resolve(workspaceRootAbs);
+
+    if (!targetIsRoot) {
+      // Ancestors: root → parent of target (excludes target itself to avoid
+      // duplication with the subtree scan below).
+      ruleSets.push(
+        ...collectAncestorGitignores(workspaceRootAbs, path.dirname(targetDirAbs))
+      );
+    }
+
+    // Subtree: target → all nested directories (includes target itself;
+    // when target === root this also covers the root .gitignore).
+    ruleSets.push(
+      ...collectSubtreeGitignores(workspaceRootAbs, targetDirAbs)
+    );
+  }
+
+  return new CombinedMatcher(ruleSets);
 }

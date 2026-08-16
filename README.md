@@ -41,7 +41,8 @@ Global patterns live in user settings (`settings.json`), so they apply everywher
 
 ## Notes / limitations
 
-- `.gitignore` scoping is a close approximation of git's real per-directory precedence (handles anchored `/path`, plain names matching any depth, and negation `!`) — good enough for export purposes, not a full git implementation.
+- `.gitignore` files follow git's real per-directory semantics: each file's patterns are evaluated relative to its own directory, plain names match at any depth below it, anchored paths (`/path`) and slash-containing patterns are relative to the owning directory, and deeper `.gitignore` files override shallower ones (with `!` negation supported everywhere).
+- Workspace and global pattern lists (`snapZip.ignore.workspacePatterns`, `snapZip.ignore.global`) use the same gitignore syntax: `#` comments, `!` negation, `dir/` directory-only patterns, `**` any-depth globs.
 - Symlinks are archived as their target file content.
 
 ## Links & License
