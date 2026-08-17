@@ -108,12 +108,12 @@ jobs:
           fi
 
           {
-            echo "## 📦 Download"
+            echo "## Download"
             echo ""
             echo "**Install from:**"
             echo ""
-            echo "[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-${PUBLISHER}.${NAME}-0078d7?logo=visualstudiocode&logoColor=white)](${MARKETPLACE_URL})  "
-            echo "[![Open VSX](https://img.shields.io/badge/Open%20VSX-${PUBLISHER}/${NAME}-6cc644?logo=vscodium&logoColor=white)](${OPENVSX_URL})"
+            echo "[![VS Code Marketplace](https://img.shields.io/static/v1?label=VS%20Code%20Marketplace&message=${PUBLISHER}.${NAME}&color=0078d7&logo=visualstudiocode&logoColor=white)](${MARKETPLACE_URL})  "
+            echo "[![Open VSX](https://img.shields.io/static/v1?label=Open%20VSX&message=${PUBLISHER_LOW}%2F${NAME_LOW}&color=6cc644&logo=vscodium&logoColor=white)](${OPENVSX_URL})"
             echo ""
             echo "**Or download the VSIX directly:**"
             echo ""
@@ -126,16 +126,19 @@ jobs:
             echo "ovx get ${PUBLISHER}.${NAME}"
             echo '```'
             echo ""
-            echo "## ✨ What's new"
+            echo "<details>"
+            echo "<summary><b>What's new</b></summary>"
             echo ""
             printf '%s\n' "${CHANGELOG}"
             echo ""
-            echo "## 🤝 Contributors"
+            echo "</details>"
+            echo ""
+            echo "## Contributors"
             echo ""
             if [ -n "${CONTRIBUTORS}" ]; then
               printf '%s\n' "${CONTRIBUTORS}"
             else
-              echo "Thanks to everyone who contributed to SnapZip! 🙌"
+              echo "Thanks to everyone who contributed to SnapZip!"
             fi
             echo ""
             echo "<sup>Contributor list generated from [GitHub contributor stats](https://github.com/${GITHUB_REPOSITORY}/graphs/contributors).</sup>"

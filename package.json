@@ -1,8 +1,8 @@
 {
   "name": "snapzip",
   "displayName": "SnapZip",
-"description": "Right-click any folder → zip. Smart, gitignore-aware, instant.",
-  "version": "1.0.4",
+  "description": "Right-click any folder → zip. Smart, gitignore-aware, instant.",
+  "version": "1.0.5",
   "icon": "media/SnapZip.png",
   "publisher": "the-long-ride",
   "repository": {
@@ -83,6 +83,14 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "snapZip.compressFolder",
+        "key": "ctrl+alt+z",
+        "mac": "cmd+alt+z",
+        "when": "filesExplorerFocus && !inputFocus && explorerResourceIsFolder"
+      }
+    ],
     "configuration": {
       "title": "SnapZip",
       "properties": {

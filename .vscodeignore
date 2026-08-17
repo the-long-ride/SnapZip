@@ -13,4 +13,6 @@ out-test/**
 test/**
 tsconfig.test.json
 *.vsix
+docs/**
+.agents/**
 

@@ -6,11 +6,11 @@ Right-click compression for VS Code / VSCodium, with `.gitignore`-aware, per-wor
 
 ## Features
 
-| Where | What |
-|---|---|
-| Explorer, right-click any folder | **Compress as .zip** |
-| Explorer view title bar (icon) | **Compress Workspace as .zip** — zips every workspace root folder |
-| Command Palette | **SnapZip: Open Settings** — visual UI to configure output location, compression level, and ignore patterns |
+| Where | What | Shortcut |
+|---|---|---|
+| Explorer, right-click or focus on any folder | **Compress as .zip** | `Ctrl+Alt+Z` (macOS: `Cmd+Alt+Z`) |
+| Explorer view title bar (icon) | **Compress Workspace as .zip** — zips every workspace root folder | — |
+| Command Palette | **SnapZip: Open Settings** — visual UI to configure output location, compression level, and ignore patterns | — |
 
 ## Ignore rules (in priority order, all combined)
 

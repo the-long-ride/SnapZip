@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { buildIgnoreMatcher } from './ignoreEngine';
 import { zipFolder } from './zipper';
 import {
@@ -19,6 +20,29 @@ import { openSettingsPanel } from './settingsPanel';
 function resolveWorkspaceRoot(targetUri: vscode.Uri): string | undefined {
   const folder = vscode.workspace.getWorkspaceFolder(targetUri);
   return folder?.uri.fsPath;
+}
+
+async function getSelectedExplorerFolders(): Promise<vscode.Uri[]> {
+  const originalClipboard = await vscode.env.clipboard.readText();
+  try {
+    await vscode.commands.executeCommand('copyFilePath');
+    const copied = await vscode.env.clipboard.readText();
+    if (!copied || copied === originalClipboard) {
+      return [];
+    }
+    const lines = copied.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const folderUris: vscode.Uri[] = [];
+    for (const line of lines) {
+      if (fs.existsSync(line) && fs.statSync(line).isDirectory()) {
+        folderUris.push(vscode.Uri.file(line));
+      }
+    }
+    return folderUris;
+  } catch {
+    return [];
+  } finally {
+    await vscode.env.clipboard.writeText(originalClipboard);
+  }
 }
 
 async function runZip(targetDirAbs: string, workspaceRootAbs: string, resourceUri: vscode.Uri) {
@@ -63,23 +87,33 @@ async function runZip(targetDirAbs: string, workspaceRootAbs: string, resourceUr
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('snapZip.compressFolder', async (uri?: vscode.Uri) => {
-      let targetUri = uri;
-      if (!targetUri) {
-        const picked = await vscode.window.showOpenDialog({
-          canSelectFiles: false,
-          canSelectFolders: true,
-          canSelectMany: false,
-          openLabel: 'Compress as .zip'
-        });
-        targetUri = picked?.[0];
+      let targetUris: vscode.Uri[] = [];
+      if (uri) {
+        targetUris = [uri];
+      } else {
+        targetUris = await getSelectedExplorerFolders();
+        if (targetUris.length === 0) {
+          const picked = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: 'Compress as .zip'
+          });
+          if (picked && picked.length > 0) {
+            targetUris = picked;
+          }
+        }
       }
-      if (!targetUri) return;
 
-      const workspaceRootAbs = resolveWorkspaceRoot(targetUri) ?? targetUri.fsPath;
-      try {
-        await runZip(targetUri.fsPath, workspaceRootAbs, targetUri);
-      } catch (err: any) {
-        vscode.window.showErrorMessage(`SnapZip: failed to compress folder - ${err?.message ?? err}`);
+      if (targetUris.length === 0) return;
+
+      for (const targetUri of targetUris) {
+        const workspaceRootAbs = resolveWorkspaceRoot(targetUri) ?? targetUri.fsPath;
+        try {
+          await runZip(targetUri.fsPath, workspaceRootAbs, targetUri);
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`SnapZip: failed to compress folder - ${err?.message ?? err}`);
+        }
       }
     }),
 

@@ -2,6 +2,15 @@
 
 All notable changes to the SnapZip extension will be documented in this file.
 
+## [1.0.5] - 2026-08-17
+
+### Added
+- Default keyboard shortcut `Ctrl+Alt+Z` (macOS: `Cmd+Alt+Z`) to instantly compress a focused folder in the Explorer panel (`filesExplorerFocus && !inputFocus && explorerResourceIsFolder`).
+- Dynamic path resolution for `snapZip.compressFolder` when triggered via keybinding, extracting explorer selection cleanly while preserving user clipboard.
+
+### Changed
+- Release workflow notes updated: removed decorative emojis, fixed 404 Marketplace and Open VSX Shields.io badge URLs, and converted "What's new" section into a collapsible dropdown.
+
 ## [1.0.4] - 2026-08-17
 
 ### Security

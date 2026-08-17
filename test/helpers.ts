@@ -31,6 +31,7 @@ export function resetStubHistories(): void {
     stubs.window.showInformationMessage,
     stubs.window.showErrorMessage,
     stubs.window.showWarningMessage,
+    stubs.window.showOpenDialog,
     stubs.window.withProgress,
     stubs.window.createWebviewPanel,
     stubs.env.clipboard.writeText,

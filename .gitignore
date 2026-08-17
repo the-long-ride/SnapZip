@@ -4,3 +4,5 @@ out-test/
 *.vsix
 dist/
 .vscode-test/
+docs/
+.agents/

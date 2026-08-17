@@ -48,6 +48,20 @@ describe('extension', () => {
     ].sort());
   });
 
+  describe('package.json contribution', () => {
+    it('declares the expected keybinding for snapZip.compressFolder', () => {
+      const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
+      assert.ok(Array.isArray(pkg.contributes?.keybindings), 'keybindings should be defined');
+      const binding = pkg.contributes.keybindings.find(
+        (kb: any) => kb.command === 'snapZip.compressFolder'
+      );
+      assert.ok(binding, 'Keybinding for snapZip.compressFolder must exist');
+      assert.strictEqual(binding.key, 'ctrl+alt+z');
+      assert.strictEqual(binding.mac, 'cmd+alt+z');
+      assert.strictEqual(binding.when, 'filesExplorerFocus && !inputFocus && explorerResourceIsFolder');
+    });
+  });
+
   describe('compressFolder command', () => {
     it('compresses a selected folder and shows success', async () => {
       const target = path.join(tmpDir, 'markdown-explorer');
@@ -80,6 +94,101 @@ describe('extension', () => {
       assert.ok(stubs.window.showErrorMessage.calledOnce);
       const error = stubs.window.showErrorMessage.firstCall.args[0] as string;
       assert.ok(error.startsWith('SnapZip: failed to compress folder'));
+    });
+
+    it('resolves folder from explorer via copyFilePath when uri is not passed', async () => {
+      const target = path.join(tmpDir, 'selected-folder');
+      fs.mkdirSync(target, { recursive: true });
+      fs.writeFileSync(path.join(target, 'file.txt'), 'hello');
+      stubs.workspace.workspaceFolders = [{ uri: { fsPath: tmpDir } }];
+
+      let clipboardContent = 'original clipboard content';
+      stubs.env.clipboard.readText.callsFake(async () => clipboardContent);
+      stubs.env.clipboard.writeText.callsFake(async (text: string) => {
+        clipboardContent = text;
+      });
+
+      stubs.commands.executeCommand.callsFake(async (cmd: string) => {
+        if (cmd === 'copyFilePath') {
+          clipboardContent = target;
+        }
+      });
+
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.compressFolder'];
+      await callback();
+
+      assert.ok(stubs.commands.executeCommand.calledWith('copyFilePath'));
+      assert.ok(stubs.window.withProgress.calledOnce);
+      assert.strictEqual(clipboardContent, 'original clipboard content');
+    });
+
+    it('compresses multiple folders when copyFilePath returns multiple paths', async () => {
+      const folderA = path.join(tmpDir, 'multi-a');
+      const folderB = path.join(tmpDir, 'multi-b');
+      fs.mkdirSync(folderA, { recursive: true });
+      fs.mkdirSync(folderB, { recursive: true });
+      fs.writeFileSync(path.join(folderA, 'a.txt'), 'a');
+      fs.writeFileSync(path.join(folderB, 'b.txt'), 'b');
+      stubs.workspace.workspaceFolders = [{ uri: { fsPath: tmpDir } }];
+
+      let clipboardContent = 'original clipboard';
+      stubs.env.clipboard.readText.callsFake(async () => clipboardContent);
+      stubs.env.clipboard.writeText.callsFake(async (text: string) => {
+        clipboardContent = text;
+      });
+
+      stubs.commands.executeCommand.callsFake(async (cmd: string) => {
+        if (cmd === 'copyFilePath') {
+          clipboardContent = `${folderA}\n${folderB}`;
+        }
+      });
+
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.compressFolder'];
+      await callback();
+
+      assert.equal(stubs.window.withProgress.callCount, 2);
+      assert.strictEqual(clipboardContent, 'original clipboard');
+    });
+
+    it('falls back to showOpenDialog when copyFilePath produces no existing folder', async () => {
+      let clipboardContent = '';
+      stubs.env.clipboard.readText.callsFake(async () => clipboardContent);
+      stubs.env.clipboard.writeText.callsFake(async (text: string) => {
+        clipboardContent = text;
+      });
+
+      stubs.commands.executeCommand.callsFake(async (cmd: string) => {
+        if (cmd === 'copyFilePath') {
+          clipboardContent = path.join(tmpDir, 'non-existent-folder');
+        }
+      });
+
+      stubs.window.showOpenDialog.resolves(undefined);
+
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.compressFolder'];
+      await callback();
+
+      assert.ok(stubs.window.showOpenDialog.calledOnce);
+    });
+
+    it('compresses folder chosen from showOpenDialog fallback', async () => {
+      const picked = path.join(tmpDir, 'picked-folder');
+      fs.mkdirSync(picked, { recursive: true });
+      fs.writeFileSync(path.join(picked, 'file.txt'), 'data');
+      stubs.workspace.workspaceFolders = [{ uri: { fsPath: tmpDir } }];
+
+      stubs.env.clipboard.readText.resolves('');
+      stubs.window.showOpenDialog.resolves([vscode.Uri.file(picked)]);
+
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.compressFolder'];
+      await callback();
+
+      assert.ok(stubs.window.showOpenDialog.calledOnce);
+      assert.ok(stubs.window.withProgress.calledOnce);
     });
   });
 

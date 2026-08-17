@@ -48,6 +48,7 @@ const window = {
   showInformationMessage: sinon.stub().resolves(undefined),
   showErrorMessage: sinon.stub().resolves(undefined),
   showWarningMessage: sinon.stub().resolves(undefined),
+  showOpenDialog: sinon.stub().resolves(undefined),
   withProgress: sinon.stub().callsFake((_options: any, task: (progress: any) => Promise<any>) =>
     task({ report: sinon.stub() })
   ),
