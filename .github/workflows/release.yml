@@ -14,17 +14,23 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  # Serialize runs per tag/ref so a duplicate tag push can't publish
+  # the same version twice (marketplace rejects "already exists").
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: 'npm'
@@ -73,20 +79,41 @@ jobs:
           emit('changelog', body);
           NODE
 
+      - name: Check if release already exists
+        id: skip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/v${VERSION}")"
+          if [ "${CODE}" = "200" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release v${VERSION} already exists — skipping duplicate publish."
+          else
+            echo "::notice::Release v${VERSION} not published yet — continuing."
+          fi
+
       - name: Package VSIX
+        if: steps.skip.outputs.exists != 'true'
         run: npm run package
 
       - name: Publish to VS Code Marketplace
+        if: steps.skip.outputs.exists != 'true'
         run: npx @vscode/vsce publish -p ${{ secrets.VSCE_PAT }} --packagePath ./snapzip-${{ steps.meta.outputs.version }}.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Publish to Open VSX Registry
+        if: steps.skip.outputs.exists != 'true'
         run: npx ovsx publish --packagePath ./snapzip-${{ steps.meta.outputs.version }}.vsix -p ${{ secrets.OVSX_PAT }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
       - name: Compose release body with marketplace links & contributors
+        if: steps.skip.outputs.exists != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLISHER: ${{ steps.meta.outputs.publisher }}
@@ -147,6 +174,7 @@ jobs:
           echo "Wrote release_body.md ($(wc -l < release_body.md) lines)"
 
       - name: Create or update GitHub release with VSIX asset
+        if: steps.skip.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
