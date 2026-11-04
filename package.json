@@ -234,5 +234,25 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/the-long-ride/SnapZip#readme",
+  "bugs": {
+    "url": "https://github.com/the-long-ride/SnapZip/issues"
+  },
+  "keywords": [
+    "snapzip",
+    "zip",
+    "compression",
+    "compress",
+    "archiver",
+    "archive",
+    "cli",
+    "npx",
+    "gitignore",
+    "vscode",
+    "vscode-extension",
+    "vscodium",
+    "open-vsx"
+  ]
 }
