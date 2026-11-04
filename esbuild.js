@@ -16,7 +16,7 @@ const emptyShim = {
 
 const watch = process.argv.includes('--watch');
 
-const opts = {
+const extensionOpts = {
   entryPoints: ['src/extension.ts'],
   bundle: true,
   platform: 'node',
@@ -30,22 +30,46 @@ const opts = {
   plugins: [emptyShim]
 };
 
+const cliOpts = {
+  entryPoints: ['src/cli.ts'],
+  bundle: true,
+  platform: 'node',
+  target: 'node18',
+  format: 'cjs',
+  outfile: 'out/cli.js',
+  banner: {
+    js: '#!/usr/bin/env node'
+  },
+  logLevel: 'info',
+  sourcemap: false,
+  minify: true,
+  plugins: [emptyShim]
+};
+
 if (watch) {
   (async () => {
-    opts.plugins.push({
-      name: 'watch-plugin',
+    const watchPlugin = (name) => ({
+      name: `watch-${name}`,
       setup(build) {
         build.onStart(() => {
-          console.log('[watch] build started');
+          console.log(`[watch:${name}] build started`);
         });
         build.onEnd((result) => {
-          console.log(`[watch] build finished with ${result.errors.length} errors`);
+          console.log(`[watch:${name}] build finished with ${result.errors.length} errors`);
         });
       }
     });
-    const ctx = await esbuild.context(opts);
-    await ctx.watch();
+
+    extensionOpts.plugins.push(watchPlugin('extension'));
+    cliOpts.plugins.push(watchPlugin('cli'));
+
+    const extCtx = await esbuild.context(extensionOpts);
+    const cliCtx = await esbuild.context(cliOpts);
+    await Promise.all([extCtx.watch(), cliCtx.watch()]);
   })();
 } else {
-  esbuild.build(opts).catch(() => process.exit(1));
+  Promise.all([
+    esbuild.build(extensionOpts),
+    esbuild.build(cliOpts)
+  ]).catch(() => process.exit(1));
 }

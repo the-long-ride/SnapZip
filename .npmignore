@@ -1,0 +1,12 @@
+.vscode/
+.vscode-test/
+.github/
+.agents/
+docs/
+src/
+test/
+scripts/
+tsconfig.json
+tsconfig.test.json
+esbuild.js
+*.vsix

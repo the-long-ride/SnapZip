@@ -8,6 +8,47 @@ export interface IgnoreOptions {
   globalPatterns: string[];
 }
 
+export const DEFAULT_GLOBAL_PATTERNS: string[] = [
+  '# --- Secrets & credentials ---',
+  '.env',
+  '.env.*',
+  '*.pem',
+  '*.key',
+  '*.pfx',
+  '*.p12',
+  'id_rsa',
+  'id_rsa.pub',
+  'id_ed25519',
+  'id_ed25519.pub',
+  '*.pgp',
+  '*.gpg',
+  '*.crt',
+  'secrets.*',
+  '.aws/**',
+  '.ssh/**',
+  '# --- SnapZip output ---',
+  '*-context-*.zip',
+  '*.snapzip.zip',
+  '.snapzipignore',
+  '# --- Dependency directories (any depth) ---',
+  '**/node_modules/',
+  '# --- Build / output directories (any depth, not only project root) ---',
+  '**/dist/',
+  '**/build/',
+  '**/out/',
+  '**/target/',
+  '**/__pycache__/',
+  '**/.next/',
+  '**/coverage/',
+  '**/.nuxt/',
+  '**/.output/',
+  '**/.turbo/',
+  '**/.expo/',
+  '**/.svelte-kit/',
+  '# --- Git metadata ---',
+  '.git/**'
+];
+
 /** Compatible with the `ignore` library's (unexported) TestResult. */
 export interface MatcherTestResult {
   ignored: boolean;

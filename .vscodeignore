@@ -15,4 +15,5 @@ tsconfig.test.json
 *.vsix
 docs/**
 .agents/**
-
+scripts/**
+.npmignore

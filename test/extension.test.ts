@@ -243,4 +243,86 @@ describe('extension', () => {
       assert.ok(stubs.window.showWarningMessage.calledWith('SnapZip: open a workspace folder first to edit settings.'));
     });
   });
+  describe('pattern management commands', () => {
+    it('addWorkspaceIgnorePattern warns when no workspace is open', async () => {
+      stubs.workspace.workspaceFolders = undefined;
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.addWorkspaceIgnorePattern'];
+      await callback();
+      assert.ok(stubs.window.showWarningMessage.calledWith('SnapZip: no workspace folder is open.'));
+    });
+
+    it('addWorkspaceIgnorePattern opens input box when workspace is open', async () => {
+      stubs.workspace.workspaceFolders = [{ uri: { fsPath: tmpDir } }];
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.addWorkspaceIgnorePattern'];
+      stubs.window.showInputBox.resolves(undefined);
+      await callback();
+      assert.ok(stubs.window.showInputBox.calledOnce);
+    });
+
+    it('addGlobalIgnorePattern opens input box', async () => {
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.addGlobalIgnorePattern'];
+      stubs.window.showInputBox.resolves(undefined);
+      await callback();
+      assert.ok(stubs.window.showInputBox.calledOnce);
+    });
+
+    it('manageIgnorePatterns warns when no workspace is open', async () => {
+      stubs.workspace.workspaceFolders = undefined;
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.manageIgnorePatterns'];
+      await callback();
+      assert.ok(stubs.window.showWarningMessage.calledWith('SnapZip: no workspace folder is open.'));
+    });
+
+    it('manageIgnorePatterns opens quick pick when workspace is open', async () => {
+      stubs.workspace.workspaceFolders = [{ uri: { fsPath: tmpDir } }];
+      mockConfig({
+        'ignore.workspacePatterns': ['pattern-a'],
+        'ignore.global': ['pattern-b']
+      });
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.manageIgnorePatterns'];
+      stubs.window.showQuickPick.resolves(undefined);
+      await callback();
+      assert.ok(stubs.window.showQuickPick.calledOnce);
+    });
+
+    it('copyWorkspacePatterns warns when no workspace is open', async () => {
+      stubs.workspace.workspaceFolders = undefined;
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.copyWorkspacePatterns'];
+      await callback();
+      assert.ok(stubs.window.showWarningMessage.calledWith('SnapZip: no workspace folder is open.'));
+    });
+
+    it('copyWorkspacePatterns writes JSON to clipboard when workspace is open', async () => {
+      stubs.workspace.workspaceFolders = [{ uri: { fsPath: tmpDir } }];
+      mockConfig({ 'ignore.workspacePatterns': ['test-pattern'] });
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.copyWorkspacePatterns'];
+      await callback();
+      assert.ok(stubs.env.clipboard.writeText.calledOnce);
+    });
+
+    it('pasteWorkspacePatterns warns when no workspace is open', async () => {
+      stubs.workspace.workspaceFolders = undefined;
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.pasteWorkspacePatterns'];
+      await callback();
+      assert.ok(stubs.window.showWarningMessage.calledWith('SnapZip: no workspace folder is open.'));
+    });
+
+    it('pasteWorkspacePatterns handles valid clipboard content', async () => {
+      stubs.workspace.workspaceFolders = [{ uri: { fsPath: tmpDir } }];
+      stubs.env.clipboard.readText.resolves('["pasted-pattern"]');
+      stubs.window.showQuickPick.resolves('Merge with existing');
+      activate(createMockContext());
+      const callback = stubs.commands.callbacks['snapZip.pasteWorkspacePatterns'];
+      await callback();
+      assert.ok(stubs.window.showInformationMessage.calledOnce);
+    });
+  });
 });
