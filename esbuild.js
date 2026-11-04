@@ -20,7 +20,7 @@ const extensionOpts = {
   entryPoints: ['src/extension.ts'],
   bundle: true,
   platform: 'node',
-  target: 'node18',
+  target: 'node24',
   format: 'cjs',
   outfile: 'out/extension.js',
   external: ['vscode'],
@@ -34,7 +34,7 @@ const cliOpts = {
   entryPoints: ['src/cli.ts'],
   bundle: true,
   platform: 'node',
-  target: 'node18',
+  target: 'node24',
   format: 'cjs',
   outfile: 'out/cli.js',
   banner: {

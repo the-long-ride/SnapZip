@@ -10,7 +10,8 @@
     "url": "https://github.com/the-long-ride/SnapZip"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.85.0",
+    "node": ">=24.0.0"
   },
   "categories": [
     "Other"
