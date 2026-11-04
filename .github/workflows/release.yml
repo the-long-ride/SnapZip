@@ -43,6 +43,11 @@ jobs:
           npm run typecheck
           npm run compile
 
+      - name: Run Test Suite & Audit
+        run: |
+          npm test
+          npm audit --audit-level=high
+
       - name: Extract version, publisher & changelog section
         id: meta
         run: |

@@ -2,6 +2,28 @@
 
 All notable changes to the SnapZip extension will be documented in this file.
 
+## [1.0.6] - 2026-11-04
+
+### General
+- Renamed npm package to `@the-long-ride/snapzip`.
+- Resolved all 17 security vulnerabilities in npm dependencies, achieving 0 vulnerabilities in `npm audit`:
+  - Upgraded `@vscode/vsce` to `4.1.0`.
+  - Added package overrides for `brace-expansion` (`^5.0.12`), `fast-uri` (`^3.1.9`), `glob` (`^14.0.3`), `js-yaml` (`^4.3.2`), `minimatch` (`^11.0.4`), and `serialize-javascript` (`^7.1.4`).
+- Added GitHub Actions matrix CI workflow (`.github/workflows/ci.yml`) covering Ubuntu, Windows, and macOS on Node 18, 20, and 22.
+- Added automated `npm test` and `npm audit --audit-level=high` gates to the release pipeline (`.github/workflows/release.yml`).
+- Configured dual-packaging architecture (`.npmignore` and `scripts/package-vsix.js`) allowing simultaneous npm package distribution and VS Code VSIX generation.
+
+### VS Code Extension
+- Added automated unit test coverage across all pattern management commands (`addWorkspaceIgnorePattern`, `addGlobalIgnorePattern`, `manageIgnorePatterns`, `copyWorkspacePatterns`, `pasteWorkspacePatterns`).
+- Hardened keybinding and context resolution flows to ensure complete behavior compatibility with previous releases.
+- Total test suite expanded to 117 tests passing with 100% command coverage.
+
+### CLI Execution
+- Introduced standalone executable CLI binary (`snapzip` / `npx @the-long-ride/snapzip`) to compress folders directly from terminal or CI.
+- Supported CLI options: `snapzip [folder]`, `-o/--output <dir>`, `-l/--level <1-4>`, `-c/--config <path>`, `--no-gitignore`, `-i/--ignore <pattern>`, `-v/--version`, and `-h/--help`.
+- Added automatic persistent configuration resolution from `.vscode/settings.json`, `.snapzipignore` (workspace root and target folder), `~/.snapziprc`, and explicit `--config` files.
+- Added `.snapzipignore` to default global ignore list so archive metadata is excluded cleanly by default.
+
 ## [1.0.5] - 2026-08-17
 
 ### Added

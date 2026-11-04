@@ -12,6 +12,32 @@ Right-click compression for VS Code / VSCodium, with `.gitignore`-aware, per-wor
 | Explorer view title bar (icon) | **Compress Workspace as .zip** — zips every workspace root folder | — |
 | Command Palette | **SnapZip: Open Settings** — visual UI to configure output location, compression level, and ignore patterns | — |
 
+## CLI Usage (NPM / NPX)
+
+SnapZip can be executed directly from terminal or scripts without VS Code:
+
+```bash
+# Compress current directory
+npx @the-long-ride/snapzip
+
+# Compress specific directory
+npx @the-long-ride/snapzip path/to/folder
+
+# Specify output directory and maximum compression
+npx @the-long-ride/snapzip my-app --output dist --level 4
+
+# Custom config file and ad-hoc ignore patterns
+npx @the-long-ride/snapzip src --config ./custom.json --ignore "*.log,temp/"
+```
+
+### CLI Configuration Support
+
+The CLI automatically detects and merges your ignore patterns from:
+- `.vscode/settings.json` (`snapZip.ignore.workspacePatterns` and `snapZip.ignore.global`)
+- `.snapzipignore` (in workspace root and target folder)
+- `~/.snapziprc` (user global config: JSON or line-separated patterns)
+- `--config <path>` (custom JSON or line-separated file)
+
 ## Ignore rules (in priority order, all combined)
 
 1. **Global patterns** (`snapZip.ignore.global`) — applies to every workspace, ships with sensible defaults for secrets (`.env`, `*.pem`, `id_rsa`, `.ssh/**`, `.git/**`, etc.) and common build folders (`node_modules/`, `dist/`, `build/`, `out/`, `target/`, etc.)
