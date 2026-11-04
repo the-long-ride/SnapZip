@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   # Serialize runs per tag/ref so a duplicate tag push can't publish
@@ -33,6 +34,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
       - name: Install dependencies
@@ -64,7 +66,8 @@ jobs:
           }
           emit('version',   pkg.version);
           emit('publisher', pkg.publisher);
-          emit('name',      pkg.name);
+          const extName = pkg.name.replace(/^@[^/]+\//, '');
+          emit('name',      extName);
 
           // Extract the "## [x.y.z] ..." section from CHANGELOG.md.
           let body = '';
@@ -117,6 +120,10 @@ jobs:
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
+      - name: Publish to npm (Trusted Publishing)
+        if: steps.skip.outputs.exists != 'true'
+        run: npm publish --provenance --access public
+
       - name: Compose release body with marketplace links & contributors
         if: steps.skip.outputs.exists != 'true'
         env:
@@ -146,6 +153,7 @@ jobs:
             echo ""
             echo "[![VS Code Marketplace](https://img.shields.io/static/v1?label=VS%20Code%20Marketplace&message=${PUBLISHER}.${NAME}&color=0078d7&logo=visualstudiocode&logoColor=white)](${MARKETPLACE_URL})  "
             echo "[![Open VSX](https://img.shields.io/static/v1?label=Open%20VSX&message=${PUBLISHER_LOW}%2F${NAME_LOW}&color=6cc644&logo=vscodium&logoColor=white)](${OPENVSX_URL})"
+            echo "[![npm](https://img.shields.io/npm/v/@the-long-ride/snapzip?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@the-long-ride/snapzip)"
             echo ""
             echo "**Or download the VSIX directly:**"
             echo ""
@@ -156,6 +164,8 @@ jobs:
             echo "code --install-extension snapzip-${VERSION}.vsix"
             echo "# Open VSX (VSCodium / Eclipse Theia / Gitpod)"
             echo "ovx get ${PUBLISHER}.${NAME}"
+            echo "# NPM CLI / NPX"
+            echo "npx @the-long-ride/snapzip"
             echo '```'
             echo ""
             echo "<details>"

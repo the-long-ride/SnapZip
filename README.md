@@ -77,6 +77,7 @@ Global patterns live in user settings (`settings.json`), so they apply everywher
 |---|---|
 | **VS Code Marketplace** | [SnapZip on VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=the-long-ride.snapzip) |
 | **Open VSX Registry** | [SnapZip on Open VSX](https://open-vsx.org/extension/the-long-ride/snapzip) |
+| **npm Package** | [@the-long-ride/snapzip on npm](https://www.npmjs.com/package/@the-long-ride/snapzip) |
 | **Author** | [the-long-ride](https://github.com/the-long-ride) |
 | **Repository** | [github.com/the-long-ride/SnapZip](https://github.com/the-long-ride/SnapZip) |
 | **Issue Tracker** | [GitHub Issues](https://github.com/the-long-ride/SnapZip/issues) |
